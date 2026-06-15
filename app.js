@@ -1,0 +1,55 @@
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
+}
+document.getElementById("closeHint").addEventListener("click", () => {
+  document.getElementById("installHint").style.display = "none";
+});
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const state = { addMode:false, selectedId:null, icons:[], currentPdf:null, currentPage:1, totalPages:0, canvasWidth:0, canvasHeight:0 };
+const $ = id => document.getElementById(id);
+
+function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+$("inspectionDate").value=today();
+
+function appData(){return {appVersion:"pwa",bridgeName:$("bridgeName").value,routeName:$("routeName").value,inspectionDate:$("inspectionDate").value,inspector:$("inspector").value,icons:state.icons};}
+function saveLocal(){localStorage.setItem("bridgePhotoFieldAppPWA",JSON.stringify(appData()));}
+function applyData(data){$("bridgeName").value=data.bridgeName||"";$("routeName").value=data.routeName||"";$("inspectionDate").value=data.inspectionDate||today();$("inspector").value=data.inspector||"";state.icons=data.icons||[];state.selectedId=null;renderIcons();renderList();saveLocal();}
+function loadLocal(){const raw=localStorage.getItem("bridgePhotoFieldAppPWA")||localStorage.getItem("bridgePhotoFieldAppV3")||localStorage.getItem("bridgePhotoFieldAppV2");if(!raw)return;try{applyData(JSON.parse(raw));}catch(e){}}
+["bridgeName","routeName","inspectionDate","inspector"].forEach(id=>$(id).addEventListener("change",saveLocal));
+
+$("addIconModeBtn").addEventListener("click",()=>{state.addMode=!state.addMode;$("addIconModeBtn").textContent=`アイコン設置モード：${state.addMode?"ON":"OFF"}`;$("addIconModeBtn").style.background=state.addMode?"#16a34a":"#2563eb";});
+
+$("pdfInput").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;const buf=await file.arrayBuffer();state.currentPdf=await pdfjsLib.getDocument({data:buf}).promise;state.totalPages=state.currentPdf.numPages;state.currentPage=1;await renderPage();});
+$("prevPageBtn").addEventListener("click",async()=>{if(!state.currentPdf||state.currentPage<=1)return;state.currentPage--;state.selectedId=null;await renderPage();});
+$("nextPageBtn").addEventListener("click",async()=>{if(!state.currentPdf||state.currentPage>=state.totalPages)return;state.currentPage++;state.selectedId=null;await renderPage();});
+
+async function renderPage(){const page=await state.currentPdf.getPage(state.currentPage);const wrapWidth=$("pdfWrap").clientWidth-8;const viewport0=page.getViewport({scale:1});const scale=Math.min(1.8,wrapWidth/viewport0.width);const viewport=page.getViewport({scale});const canvas=$("pdfCanvas");const ctx=canvas.getContext("2d");canvas.width=viewport.width;canvas.height=viewport.height;state.canvasWidth=viewport.width;state.canvasHeight=viewport.height;$("iconLayer").style.width=`${viewport.width}px`;$("iconLayer").style.height=`${viewport.height}px`;$("emptyState").style.display="none";$("pageInfo").textContent=`${state.currentPage} / ${state.totalPages}ページ`;await page.render({canvasContext:ctx,viewport}).promise;renderIcons();}
+
+$("pdfWrap").addEventListener("click",e=>{if(!state.addMode)return;if(e.target.classList.contains("damageIcon"))return;const rect=$("pdfCanvas").getBoundingClientRect();if(rect.width===0||rect.height===0){alert("先にPDFを読み込んでください。");return;}const x=(e.clientX-rect.left)/rect.width;const y=(e.clientY-rect.top)/rect.height;if(x<0||y<0||x>1||y>1)return;const id=Date.now().toString();const no=state.icons.length+1;state.icons.push({id,no,page:state.currentPage,x,y,member:"",position:"",damageType:"",rank:"",memo:"",photoNote:"",photos:[]});state.selectedId=id;state.addMode=false;$("addIconModeBtn").textContent="アイコン設置モード：OFF";$("addIconModeBtn").style.background="#2563eb";renderIcons();selectIcon(id);saveLocal();});
+
+function renderIcons(){const layer=$("iconLayer");layer.innerHTML="";const canvas=$("pdfCanvas");const w=canvas.clientWidth||canvas.width||state.canvasWidth;const h=canvas.clientHeight||canvas.height||state.canvasHeight;layer.style.width=`${w}px`;layer.style.height=`${h}px`;state.icons.filter(icon=>(icon.page||1)===state.currentPage).forEach(icon=>{const div=document.createElement("div");div.className="damageIcon"+(icon.id===state.selectedId?" selected":"");div.style.left=`${icon.x*w}px`;div.style.top=`${icon.y*h}px`;div.textContent=icon.no;div.title=`損傷${icon.no}`;div.addEventListener("click",ev=>{ev.stopPropagation();selectIcon(icon.id);});layer.appendChild(div);});}
+
+function selectIcon(id){state.selectedId=id;const icon=state.icons.find(i=>i.id===id);if(!icon)return;$("selectedInfo").textContent=`選択中：損傷${icon.no}（PDF ${icon.page||1}ページ）`;$("member").value=icon.member||"";$("position").value=icon.position||"";$("damageType").value=icon.damageType||"";$("rank").value=icon.rank||"";$("memo").value=icon.memo||"";$("photoNote").value=icon.photoNote||"";renderPhotoPreview(icon.photos||[]);renderIcons();}
+function renderPhotoPreview(photos){const area=$("photoPreview");area.innerHTML="";photos.forEach((p,idx)=>{const box=document.createElement("div");box.className="photoBox";const img=document.createElement("img");img.src=p.src||p;const cap=document.createElement("span");cap.textContent=p.name||`写真${idx+1}`;box.appendChild(img);box.appendChild(cap);area.appendChild(box);});}
+
+$("photoInput").addEventListener("change",async e=>{const files=[...e.target.files];if(!state.selectedId){alert("先にアイコンを選択してください。");e.target.value="";return;}const icon=state.icons.find(i=>i.id===state.selectedId);for(const file of files){const dataUrl=await resizeImage(file,1600,0.84);const photoNo=(icon.photos||[]).length+1;const safeBridge=safeName($("bridgeName").value||"bridge");const name=`${safeBridge}_損傷${String(icon.no).padStart(3,"0")}_写真${String(photoNo).padStart(2,"0")}.jpg`;icon.photos.push({name,src:dataUrl,note:$("photoNote").value||""});}renderPhotoPreview(icon.photos);renderList();saveLocal();e.target.value="";});
+function resizeImage(file,maxWidth,quality){return new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{const scale=Math.min(1,maxWidth/img.width);const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL("image/jpeg",quality));};img.src=reader.result;};reader.readAsDataURL(file);});}
+
+$("saveDamageBtn").addEventListener("click",()=>{if(!state.selectedId){alert("先にアイコンを選択してください。");return;}const icon=state.icons.find(i=>i.id===state.selectedId);icon.member=$("member").value;icon.position=$("position").value;icon.damageType=$("damageType").value;icon.rank=$("rank").value;icon.memo=$("memo").value;icon.photoNote=$("photoNote").value;renderList();saveLocal();alert("保存しました。");});
+$("deleteIconBtn").addEventListener("click",()=>{if(!state.selectedId)return alert("削除するアイコンを選択してください。");if(!confirm("選択中のアイコンと写真情報を削除しますか？"))return;state.icons=state.icons.filter(i=>i.id!==state.selectedId);state.icons.forEach((i,idx)=>i.no=idx+1);state.selectedId=null;$("selectedInfo").textContent="アイコンを選択してください。";["member","position","damageType","rank","memo","photoNote"].forEach(id=>$(id).value="");$("photoPreview").innerHTML="";renderIcons();renderList();saveLocal();});
+
+function renderList(){const list=$("recordList");if(state.icons.length===0){list.innerHTML="<p class='note'>まだ記録がありません。</p>";return;}list.innerHTML="";state.icons.forEach(icon=>{const div=document.createElement("div");div.className="record";div.innerHTML=`<strong>損傷${icon.no}：${escapeHtml(icon.member||"部材未入力")} / ${escapeHtml(icon.damageType||"損傷未入力")}</strong><br><small>PDF：${icon.page||1}ページ　位置：${escapeHtml(icon.position||"-")}　程度：${escapeHtml(icon.rank||"-")}　写真：${(icon.photos||[]).length}枚</small><p>${escapeHtml(icon.memo||"")}</p><div class="recordThumbs"></div>`;const thumbs=div.querySelector(".recordThumbs");(icon.photos||[]).forEach(p=>{const img=document.createElement("img");img.src=p.src||p;thumbs.appendChild(img);});div.addEventListener("click",async()=>{if(state.currentPdf&&state.currentPage!==(icon.page||1)){state.currentPage=icon.page||1;await renderPage();}selectIcon(icon.id);});list.appendChild(div);});}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function safeName(s){return String(s).replace(/[\\/:*?"<>| \u3000]/g,"_");}
+
+$("exportCsvBtn").addEventListener("click",()=>{const rows=[["橋梁名","路線名","点検日","点検者","損傷番号","PDFページ","部材名","位置","損傷種類","損傷程度","メモ","写真備考","写真枚数","写真名","PDF上X","PDF上Y"]];state.icons.forEach(icon=>{const photoNames=(icon.photos||[]).map(p=>p.name||"").join(" / ");rows.push([$("bridgeName").value,$("routeName").value,$("inspectionDate").value,$("inspector").value,icon.no,icon.page||1,icon.member,icon.position,icon.damageType,icon.rank,icon.memo,icon.photoNote,(icon.photos||[]).length,photoNames,icon.x.toFixed(4),icon.y.toFixed(4)]);});downloadText("\ufeff"+rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\n"),`${safeName($("bridgeName").value||"bridge")}_photo_fieldbook.csv`,"text/csv;charset=utf-8");});
+$("exportJsonBtn").addEventListener("click",()=>downloadText(JSON.stringify(appData(),null,2),`${safeName($("bridgeName").value||"bridge")}_保存データ.json`,"application/json"));
+$("jsonInput").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{applyData(JSON.parse(await file.text()));alert("保存データを読み込みました。PDFは再度読み込んでください。");}catch(err){alert("JSONの読み込みに失敗しました。");}});
+$("exportPhotoZipBtn").addEventListener("click",async()=>{if(typeof JSZip==="undefined"){alert("ZIP作成ライブラリを読み込めませんでした。インターネット接続を確認してください。");return;}const zip=new JSZip();let count=0;state.icons.forEach(icon=>(icon.photos||[]).forEach((p,idx)=>{const name=p.name||`damage_${icon.no}_${idx+1}.jpg`;const base64=(p.src||p).split(",")[1];zip.file(name,base64,{base64:true});count++;}));if(count===0)return alert("出力する写真がありません。");downloadBlob(await zip.generateAsync({type:"blob"}),`${safeName($("bridgeName").value||"bridge")}_写真.zip`);});
+function downloadText(text,filename,type){downloadBlob(new Blob([text],{type}),filename);}
+function downloadBlob(blob,filename){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+$("clearBtn").addEventListener("click",()=>{if(!confirm("保存済みの試作データをすべて削除しますか？"))return;localStorage.removeItem("bridgePhotoFieldAppPWA");localStorage.removeItem("bridgePhotoFieldAppV3");localStorage.removeItem("bridgePhotoFieldAppV2");state.icons=[];state.selectedId=null;renderIcons();renderList();$("photoPreview").innerHTML="";});
+window.addEventListener("resize",renderIcons);
+loadLocal();renderList();

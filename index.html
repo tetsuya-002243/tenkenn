@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>橋梁点検 写真野帳</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1f2937">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="写真野帳">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="installHint" class="installHint">
+  iPadではSafariで開き、共有ボタン →「ホーム画面に追加」でアプリ風に使えます。
+  <button id="closeHint">閉じる</button>
+</div>
+
+<header>
+  <div>
+    <h1>橋梁点検 写真野帳</h1>
+    <p>PDF損傷図にアイコンを置き、写真・損傷情報を管理</p>
+  </div>
+  <div class="headerButtons">
+    <button id="exportCsvBtn">CSV出力</button>
+    <button id="exportJsonBtn">保存データ出力</button>
+    <button id="exportPhotoZipBtn">写真ZIP出力</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. 案件情報</h2>
+    <div class="grid">
+      <label>橋梁名<input id="bridgeName" value="試作橋"></label>
+      <label>路線名<input id="routeName" placeholder="例：町道〇〇線"></label>
+      <label>点検日<input id="inspectionDate" type="date"></label>
+      <label>点検者<input id="inspector" placeholder="例：中川"></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>2. 損傷図PDFを読み込み</h2>
+    <input id="pdfInput" type="file" accept="application/pdf" />
+    <div class="toolbar">
+      <button id="prevPageBtn">前ページ</button>
+      <span id="pageInfo" class="badge">PDF未読込</span>
+      <button id="nextPageBtn">次ページ</button>
+      <button id="addIconModeBtn">アイコン設置モード：OFF</button>
+      <button id="clearBtn" class="danger">全データ削除</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>3. 保存データの読込</h2>
+    <p class="note">保存データJSONを読み込むと記録を復元できます。PDFは再度読み込んでください。</p>
+    <input id="jsonInput" type="file" accept="application/json" />
+  </section>
+
+  <section class="workarea panel">
+    <h2>4. 損傷図</h2>
+    <p class="note">「アイコン設置モード：ON」にして、PDF上の損傷位置をタップしてください。</p>
+    <div id="pdfWrap">
+      <canvas id="pdfCanvas"></canvas>
+      <div id="iconLayer"></div>
+      <div id="emptyState">ここにPDF損傷図が表示されます</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>5. 写真・損傷情報</h2>
+    <div id="selectedInfo" class="selected">アイコンを選択してください。</div>
+    <div class="grid">
+      <label>部材名
+        <select id="member">
+          <option value="">選択</option>
+          <option>主桁</option><option>横桁</option><option>床版</option><option>橋台</option>
+          <option>橋脚</option><option>支承</option><option>伸縮装置</option><option>地覆</option>
+          <option>高欄・防護柵</option><option>排水施設</option><option>その他</option>
+        </select>
+      </label>
+      <label>位置・番号<input id="position" placeholder="例：A1、G1、P1、径間1"></label>
+      <label>損傷種類
+        <select id="damageType">
+          <option value="">選択</option>
+          <option>ひびわれ</option><option>剥離・鉄筋露出</option><option>漏水・遊離石灰</option>
+          <option>うき</option><option>腐食</option><option>防食機能の劣化</option>
+          <option>変形・欠損</option><option>土砂詰まり</option><option>その他</option>
+        </select>
+      </label>
+      <label>損傷程度
+        <select id="rank">
+          <option value="">選択</option>
+          <option>a</option><option>b</option><option>c</option><option>d</option><option>e</option>
+        </select>
+      </label>
+      <label>写真方向・備考<input id="photoNote" placeholder="例：A1側から、下面"></label>
+    </div>
+    <label>メモ<textarea id="memo" rows="3" placeholder="例：下フランジに腐食、塗膜劣化あり"></textarea></label>
+    <div class="toolbar">
+      <label class="cameraButton">写真を撮影・添付
+        <input id="photoInput" type="file" accept="image/*" capture="environment" multiple>
+      </label>
+      <button id="saveDamageBtn">選択アイコンに保存</button>
+      <button id="deleteIconBtn" class="danger">選択アイコンを削除</button>
+    </div>
+    <div id="photoPreview" class="photos"></div>
+  </section>
+
+  <section class="panel">
+    <h2>6. 記録一覧</h2>
+    <div id="recordList" class="recordList"></div>
+  </section>
+</main>
+
+<footer>
+  <p>アプリ風PWA試作版：ホーム画面追加対応。端末ブラウザ内保存。</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
